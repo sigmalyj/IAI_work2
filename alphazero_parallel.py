@@ -27,6 +27,9 @@ console_handler.setLevel(logging.INFO)
 logger.addHandler(console_handler)
 logger.setLevel(logging.INFO)
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="torch.distributed.elastic.multiprocessing")
+
 class AlphaZeroParallelConfig(AlphaZeroConfig):
     def __init__(
         self, 
@@ -111,21 +114,35 @@ def execute_episode_worker(
                         player = env.current_player
                         # MCTS self-play
                         ########################
-                        # TODO: your code here #
-                        policy = None # compute policy with mcts
-                        
-                        symmetries = get_symmetries(state, policy) # rotate&flip the data&policy
+                        # Compute policy with MCTS
+                        policy = mcts.get_policy()  # 获取当前节点的策略
+
+                        # Rotate and flip the data & policy for data augmentation
+                        symmetries = get_symmetries(state, policy)
                         train_examples += [(x[0], x[1], player) for x in symmetries]
-                        
-                        pass # choose a action accroding to policy
-                        done = False # apply the action to env
+
+                        # Choose an action according to the policy
+                        action = np.random.choice(len(policy), p=policy)
+
+                        # Apply the action to the environment
+                        state, reward, done = env.step(action)
+
                         if done:
-                            pass # record all data
-                            # tips: use env.compute_canonical_form_obs to transform the observation into BLACK's perspective
-                        
-                        pass # update mcts (you can use get_subtree())
+                            # Record all data
+                            canonical_obs = env.compute_canonical_form_obs(state, env.current_player)
+                            train_examples = [(obs, pi, reward if p == env.current_player else -reward)
+                                              for obs, pi, p in train_examples]
+                            all_examples += train_examples
+                            all_episode_len.append(len(train_examples))
+                            result_counter.add(reward, 1)
+                            break
+
+                        # Update MCTS (use get_subtree to move to the next state)
+                        mcts = mcts.get_subtree(action)
+                        if mcts is None:
+                            mcts = puct_mcts.PUCTMCTS(env, net, config)
                         ########################
-                        
+
                 logger.debug(f"[Worker {id}] Finished {int(args)} episodes (length={all_episode_len}) in {time.time()-st0:.3f}s, {result_counter}")
                 conn.send((all_examples, result_counter))
                 

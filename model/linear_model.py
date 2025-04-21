@@ -83,7 +83,7 @@ class NumpyLinearModel():
         # v_trgt: ground truth values
         # @return: an float value, reprenting the loss
         ########################
-        return None
+        return np.mean((v_pred - v_trgt) ** 2)
     
     def grad_pi(self, X:np.ndarray, pi_trgt:np.ndarray, pi_pred:np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         B = X.shape[0]
@@ -99,9 +99,14 @@ class NumpyLinearModel():
         # v_trgt: ground truth values
         # @return: Tuple(grad_w_v, grad_b_v)
         ########################
-        grad_w_v =  None # shape (O, )
-        grad_b_v =  None # shape (1,)
-        return grad_w_v, grad_b_v
+        B = X.shape[0]  # Batch size
+        v = self.forward_v(X)  # Predicted value
+        delta = (1 - v ** 2) * (v - v_trgt)  # Element-wise gradient factor
+
+        grad_w_v = (2 / B) * X.T @ delta  # Gradient w.r.t. w_v
+        grad_b_v = (2 / B) * np.sum(delta, axis=0)  # Gradient w.r.t. b_v
+
+        return grad_w_v.flatten(), grad_b_v.flatten()
     
     def weight_decay(self, a:float=.0) -> None:
         a = 1-a

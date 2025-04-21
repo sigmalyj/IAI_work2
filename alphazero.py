@@ -60,6 +60,7 @@ class AlphaZero:
         self.mcts = None
         self.train_eamples_queue = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
     
+
     def execute_episode(self):
         train_examples = []
         env = self.env.fork()
@@ -71,19 +72,30 @@ class AlphaZero:
             player = env.current_player
             # MCTS self-play
             ########################
-            # TODO: your code here #
-            policy = None # compute policy with mcts
-            
-            symmetries = get_symmetries(state, policy) # rotate&flip the data&policy
+            # Compute policy with MCTS
+            policy = mcts.get_policy()  # 获取当前节点的策略
+
+            # Rotate and flip the data & policy for data augmentation
+            symmetries = get_symmetries(state, policy)
             train_examples += [(x[0], x[1], player) for x in symmetries]
-            
-            pass # choose a action accroding to policy
-            done = False # apply the action to env
+
+            # Choose an action according to the policy
+            action = np.random.choice(len(policy), p=policy)
+
+            # Apply the action to the environment
+            state, reward, done = env.step(action)
+
             if done:
-                pass # record all data
-                # tips: use env.compute_canonical_form_obs to transform the observation into BLACK's perspective
-            
-            pass # update mcts (you can use get_subtree())
+                # Record all data
+                canonical_obs = env.compute_canonical_form_obs(state, env.current_player)
+                train_examples = [(obs, pi, reward if p == env.current_player else -reward)
+                                    for obs, pi, p in train_examples]
+                return train_examples
+
+            # Update MCTS (use get_subtree to move to the next state)
+            mcts = mcts.get_subtree(action)
+            if mcts is None:
+                mcts = puct_mcts.PUCTMCTS(env, self.net, config)
             ########################
     
     def evaluate(self):

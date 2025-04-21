@@ -34,64 +34,73 @@ class PUCTMCTS:
         else:
             return None
     
-    def puct_action_select(self, node:MCTSNode):
-       # select the best action based on PUCB when expanding the tree
-        
-        ########################
-        # TODO: your code here #
-        ########################
-        return 0
-        ########################
+    def puct_action_select(self, node: MCTSNode):
+        # select the best action based on PUCB when expanding the tree
+        total_visits = np.sum(node.child_N_visit)
+        if total_visits == 0:
+            total_visits = 1e-8  # Avoid division by zero
+        log_visits = np.log(total_visits + 1)
 
-    def backup(self, node:MCTSNode, value):
+        best_puct = -np.inf
+        best_action = -1
+        for action in range(node.n_action):
+            if node.action_mask[action] == 0:  # Skip invalid actions
+                continue
+            n = node.child_N_visit[action]
+            q = node.child_V_total[action] / n if n > 0 else 0
+            p = node.child_priors[action]
+            puct = q + self.config.C * p * np.sqrt(log_visits) / (1 + n)
+            if puct > best_puct:
+                best_puct = puct
+                best_action = action
+        return best_action
+
+    def backup(self, node: MCTSNode, value):
         # backup the value of the leaf node to the root
         # update N_visit and V_total of each node in the path
-        
-        ########################
-        # TODO: your code here #
-        ########################
-        pass 
-        ########################  
-    
+        current = node
+        while current.parent is not None:
+            action = current.action
+            current.parent.child_N_visit[action] += 1
+            current.parent.child_V_total[action] += value
+            value = -value  # Alternate value for the opponent
+            current = current.parent
+
     def pick_leaf(self):
         # select the leaf node to expand
         # the leaf node is the node that has not been expanded
         # create and return a new node if game is not ended
-        
-        ########################
-        # TODO: your code here #
-        ########################
-        return self.root
-        ########################
-    
-    def get_policy(self, node:MCTSNode = None):
+        current = self.root
+        while True:
+            if current.done:
+                return current
+            action = self.puct_action_select(current)
+            if action == -1 or not current.has_child(action):
+                return current.add_child(action)
+            current = current.get_child(action)
+
+    def get_policy(self, node: MCTSNode = None):
         # return the policy of the tree(root) after the search
-        # the policy conmes from the visit count of each action 
-        
-        ########################
-        # TODO: your code here #
-        ########################
-        return np.ones(len(node.child_N_visit)) / len(node.child_N_visit)
-        ########################
+        # the policy comes from the visit count of each action
+        if node is None:
+            node = self.root
+        masked_visits = node.child_N_visit * node.action_mask
+        total = np.sum(masked_visits)
+        if total == 0:
+            policy = node.action_mask.astype(np.float32)
+            policy /= np.sum(policy)
+        else:
+            policy = masked_visits / total
+        return policy
 
     def search(self):
         for _ in range(self.config.n_search):
             leaf = self.pick_leaf()
-            value = 0
             if leaf.done:
-                ########################
-                # TODO: your code here #
-                ########################
-                pass
-                ########################
+                value = leaf.reward
             else:
-                ########################
-                # TODO: your code here #
-                ########################
-                # NOTE: you should compute the policy and value 
-                #       using the value&policy model!
-                pass
-                ########################
+                obs = leaf.env.compute_canonical_form_obs(leaf.env.observation, leaf.env.current_player)
+                policy, value = self.model.predict(obs)
+                leaf.set_prior(policy)
             self.backup(leaf, value)
-            
         return self.get_policy(self.root)

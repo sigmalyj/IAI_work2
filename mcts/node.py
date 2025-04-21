@@ -7,7 +7,7 @@ INF = 1e16
 class MCTSNode:
     def __init__(
         self, 
-        action:int, env:BaseGame, reward:float,
+        action:int, env:BaseGame, reward:bool,
         parent: 'MCTSNode' = None
     ) -> None:
         self.env  = env
@@ -43,12 +43,14 @@ class MCTSNode:
         return self.children.get(action, None)
     
     def set_prior(self, prior:np.ndarray):
-        self.child_priors = prior.copy()
+        # for PUCT
+        self.child_priors = prior
     
     def has_child(self, action:int):
         return action in self.children
         
     def cut_parent(self):
+        # detach current node from parent
         self.parent = None
     
     
