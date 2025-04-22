@@ -406,3 +406,4 @@ if __name__ == "__main__":
     N_WORKER = 10 # Set a smaller worker number when debug
     alphazero = AlphaZeroParallel(env, net_builder, config, N_WORKER, seed=MASTER_SEED)
     alphazero.learn()
+    alphazero.close()
