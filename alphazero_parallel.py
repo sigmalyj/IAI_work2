@@ -368,6 +368,24 @@ def polynomial_basis(X: np.ndarray, degree: int = 2) -> np.ndarray:
         features.append(X**d)
     return np.concatenate(features, axis=1)
 
+# 定义高斯核基函数
+def gaussian_basis(
+    X: np.ndarray, centers: np.ndarray, sigma: float = 1.0
+) -> np.ndarray:
+    """
+    高斯核基函数，将输入映射到高斯核空间。
+    :param X: 原始输入数据，形状为 (B, O)
+    :param centers: 高斯核的中心，形状为 (C, O)
+    :param sigma: 高斯核的宽度
+    :return: 映射后的特征，形状为 (B, C)
+    """
+    B, O = X.shape
+    C, _ = centers.shape
+    # 计算高斯核映射
+    diff = X[:, np.newaxis, :] - centers[np.newaxis, :, :]  # (B, C, O)
+    dist_sq = np.sum(diff**2, axis=2)  # (B, C)
+    return np.exp(-dist_sq / (2 * sigma**2))
+
 
 if __name__ == "__main__":
     from env import *
@@ -379,7 +397,7 @@ if __name__ == "__main__":
     torch.manual_seed(MASTER_SEED)
 
     logger.setLevel(logging.INFO)
-    file_handler = logging.FileHandler("log.txt") # Use this to record your logs in file 
+    file_handler = logging.FileHandler("log.txt", mode = 'w') # Use this to record your logs in file 
     file_handler.setLevel(logging.INFO)
     logger.addHandler(file_handler)
 
@@ -409,8 +427,17 @@ if __name__ == "__main__":
     env = GoGame(7, obs_mode="extra_feature")
     # env = GoGame(7) # oringin observation, only the n*n game board
 
+    # 定义高斯核的中心（可以随机初始化或基于数据分布选择）
+    num_centers = 10  # 高斯核的数量
+    observation_size = np.prod(env.observation_size)  # 展平后的特征维度
+    centers = np.random.uniform(
+        -1, 1, size=(num_centers, observation_size)
+    )  # 随机初始化中心
+
+    # 使用高斯核基函数扩展特征
     def base_function(X: np.ndarray) -> np.ndarray:
-        return polynomial_basis(X, degree=3)  # 使用三阶多项式基函数
+        X = X.reshape(X.shape[0], -1)  # 展平输入
+        return gaussian_basis(X, centers, sigma=0.5)  # 使用高斯核基函数
 
     def net_builder(device=device):
         net = NumpyLinearModel(env.observation_size, env.action_space_size, None, device=device, base_function=base_function)

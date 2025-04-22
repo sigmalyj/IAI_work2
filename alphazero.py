@@ -59,7 +59,6 @@ class AlphaZero:
         self.mcts_config.with_noise = False
         self.mcts = None
         self.train_eamples_queue = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
-    
 
     def execute_episode(self):
         train_examples = []
@@ -97,7 +96,7 @@ class AlphaZero:
             if mcts is None:
                 mcts = puct_mcts.PUCTMCTS(env, self.net, config)
             ########################
-    
+
     def evaluate(self):
         player = PUCTPlayer(self.mcts_config, self.net, deterministic=True)
         # baseline_player = AlphaBetaPlayer()
@@ -106,11 +105,11 @@ class AlphaZero:
         logger.info(f"[EVALUATION RESULT]: win{result[0][0]}, lose{result[0][1]}, draw{result[0][2]}")
         logger.info(f"[EVALUATION RESULT]:(first)  win{result[1][0]}, lose{result[1][1]}, draw{result[1][2]}")
         logger.info(f"[EVALUATION RESULT]:(second) win{result[2][0]}, lose{result[2][1]}, draw{result[2][2]}")
-    
+
     def learn(self):
         for iter in range(1, self.config.n_train_iter + 1):
             logger.info(f"------ Start Self-Play Iteration {iter} ------")
-            
+
             # collect new examples
             T = tqdm(range(self.config.n_match_train), desc="Self Play")
             cnt = ResultCounter()
@@ -119,36 +118,37 @@ class AlphaZero:
                 self.train_eamples_queue += episode
                 cnt.add(episode[0][-1], 1)
             logger.info(f"[NEW TRAIN DATA COLLECTED]: {str(cnt)}")
-            
+
             # pop old examples
             if len(self.train_eamples_queue) > self.config.max_queue_length:
                 self.train_eamples_queue = self.train_eamples_queue[-self.config.max_queue_length:]
-            
+
             # shuffle examples for training
             train_data = copy.copy(self.train_eamples_queue)
             shuffle(train_data)
             logger.info(f"[TRAIN DATA SIZE]: {len(train_data)}")
-            
+
             # save current net to last_net
             self.net.save_checkpoint(folder=self.config.checkpoint_path, filename='temp.pth.tar')
             self.last_net.load_checkpoint(folder=self.config.checkpoint_path, filename='temp.pth.tar')
-            
+
             # train current net
             self.net.train(train_data)
-            
+
             # evaluate current net
             env = self.env.fork()
             env.reset()
-            
+
             last_mcts_player = PUCTPlayer(self.mcts_config, self.last_net, deterministic=True)
             current_mcts_player = PUCTPlayer(self.mcts_config, self.net, deterministic=True)
-            
+
             result = multi_match(self.env, last_mcts_player, current_mcts_player, self.config.n_match_update)[0]
             # win_rate = result[1] / sum(result)
             total_win_lose = result[0] + result[1]
             win_rate = result[1] / total_win_lose if total_win_lose > 0 else 1
             logger.info(f"[EVALUATION RESULT]: currrent_win{result[1]}, last_win{result[0]}, draw{result[2]}; win_rate={win_rate:.3f}")
-            
+
+
             if win_rate > self.config.update_threshold:
                 self.net.save_checkpoint(folder=self.config.checkpoint_path, filename='best.pth.tar')
                 logger.info(f"[ACCEPT NEW MODEL]")
@@ -156,8 +156,6 @@ class AlphaZero:
             else:
                 self.net.load_checkpoint(folder=self.config.checkpoint_path, filename='temp.pth.tar')
                 logger.info(f"[REJECT NEW MODEL]")
-
-
 
 # 定义多项式基函数
 def polynomial_basis(X: np.ndarray, degree: int = 2) -> np.ndarray:
@@ -170,8 +168,24 @@ def polynomial_basis(X: np.ndarray, degree: int = 2) -> np.ndarray:
     B, O = X.shape
     features = [X]
     for d in range(2, degree + 1):
-        features.append(X ** d)
+        features.append(X**d)
     return np.concatenate(features, axis=1)
+
+# 定义高斯核基函数
+def gaussian_basis(X: np.ndarray, centers: np.ndarray, sigma: float = 1.0) -> np.ndarray:
+    """
+    高斯核基函数，将输入映射到高斯核空间。
+    :param X: 原始输入数据，形状为 (B, O)
+    :param centers: 高斯核的中心，形状为 (C, O)
+    :param sigma: 高斯核的宽度
+    :return: 映射后的特征，形状为 (B, C)
+    """
+    B, O = X.shape
+    C, _ = centers.shape
+    # 计算高斯核映射
+    diff = X[:, np.newaxis, :] - centers[np.newaxis, :, :]  # (B, C, O)
+    dist_sq = np.sum(diff ** 2, axis=2)  # (B, C)
+    return np.exp(-dist_sq / (2 * sigma ** 2))
 
 if __name__ == "__main__":
     from env import *
@@ -186,7 +200,7 @@ if __name__ == "__main__":
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     logger.addHandler(console_handler)
-    file_handler = logging.FileHandler("log.txt")
+    file_handler = logging.FileHandler("log.txt", mode ='w')
     file_handler.setLevel(logging.INFO)
     logger.addHandler(file_handler)
 
@@ -216,9 +230,15 @@ if __name__ == "__main__":
     # Go Game with extended observation
     env = GoGame(7, obs_mode="extra_feature")
 
-    # 使用多项式基函数扩展特征
+    # 定义高斯核的中心（可以随机初始化或基于数据分布选择）
+    num_centers = 10  # 高斯核的数量
+    observation_size = np.prod(env.observation_size)  # 展平后的特征维度
+    centers = np.random.uniform(-1, 1, size=(num_centers, observation_size))  # 随机初始化中心
+
+    # 使用高斯核基函数扩展特征
     def base_function(X: np.ndarray) -> np.ndarray:
-        return polynomial_basis(X, degree=3)  # 使用三阶多项式基函数
+        X = X.reshape(X.shape[0], -1)  # 展平输入
+        return gaussian_basis(X, centers, sigma=0.5)  # 使用高斯核基函数
 
     # 初始化线性模型并传入基函数
     net = NumpyLinearModel(env.observation_size, env.action_space_size, None, device=device, base_function=base_function)
