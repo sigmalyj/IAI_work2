@@ -205,10 +205,10 @@ class AlphaZeroParallel:
         self.train_eamples_queue = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         param_list = self.env.init_param_list()
         env_builder = lambda: self.env.__class__(*param_list)
-        
+
         if seed is None:
             seed = 0
-        
+
         ctx = torch.multiprocessing.get_context("spawn")
         self.pipes = [ctx.Pipe() for _ in range(self.n_worker)]
         self.workers = [ctx.Process(
@@ -227,8 +227,7 @@ class AlphaZeroParallel:
         for worker in self.workers:
             worker.start()
         logger.debug(f"[AlphaZeroParallel] Started {self.n_worker} workers")
-        
-    
+
     def execute_episode_parallel(self):
         start_search_t = time.time()
         train_examples = []
@@ -248,7 +247,7 @@ class AlphaZeroParallel:
             result_counter.merge_with(cnt)
         logger.info(f"[AlphaZeroParallel] Finished {n} episodes ({len(train_examples)} examples) in {time.time()-start_search_t:.3f}s, {result_counter}")
         return train_examples
-    
+
     def pit_with_last(self, n_run:int, opp_checkpt_filename:str, current_checkpt_filename:str):
         n_run = self.config.n_match_update
         assert n_run % 2 == 0
@@ -270,7 +269,7 @@ class AlphaZeroParallel:
             n_p2_win += r[1]
             n_draw += r[2]
         return (n_p1_win, n_p2_win, n_draw)
-    
+
     def evaluate(self):
         n_run = self.config.n_match_eval
         assert n_run % 2 == 0
@@ -307,40 +306,40 @@ class AlphaZeroParallel:
         logger.info(f"[EVALUATION RESULT]: win{result[0][0]}, lose{result[0][1]}, draw{result[0][2]}")
         logger.info(f"[EVALUATION RESULT]:(first)  win{result[1][0]}, lose{result[1][1]}, draw{result[1][2]}")
         logger.info(f"[EVALUATION RESULT]:(second) win{result[2][0]}, lose{result[2][1]}, draw{result[2][2]}")
-    
+
     def learn(self):
         self.net.save_checkpoint(folder=self.config.checkpoint_path, filename='best.pth.tar')
         for iter in range(1, self.config.n_train_iter + 1):
             st = time.time()
             logger.info(f"------ Start Self-Play Iteration {iter} ------")
-            
+
             # collect new examples
             self.train_eamples_queue += self.execute_episode_parallel()
-            
+
             # pop old examples
             if len(self.train_eamples_queue) > self.config.max_queue_length:
                 self.train_eamples_queue = self.train_eamples_queue[-self.config.max_queue_length:]
-            
+
             # shuffle examples for training
             train_data = copy.copy(self.train_eamples_queue)
             shuffle(train_data)
             logger.info(f"[TRAIN DATA SIZE]: {len(train_data)}")
-            
+
             # with open(os.path.join(self.config.checkpoint_path, f'buffer_iter-{iter:04d}.pickle'), 'wb') as handle:
             #     pickle.dump(train_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
-            
+
             # train current net
             self.net.train(train_data)
-            
+
             # evaluate current net
             self.net.save_checkpoint(folder=self.config.checkpoint_path, filename='temp.pth.tar')
-            
+
             result = self.pit_with_last(self.config.n_match_update, 'best.pth.tar', 'temp.pth.tar')
             # win_rate = result[1] / sum(result)
             total_win_lose = result[0] + result[1]
             win_rate = result[1] / total_win_lose if total_win_lose > 0 else 1
             logger.info(f"[EVALUATION RESULT]: currrent_win{result[1]}, last_win{result[0]}, draw{result[2]}; win_rate={win_rate:.3f}")
-            
+
             if win_rate > self.config.update_threshold:
                 self.net.save_checkpoint(folder=self.config.checkpoint_path, filename='best.pth.tar')
                 logger.info(f"[ACCEPT NEW MODEL]")
@@ -354,21 +353,36 @@ class AlphaZeroParallel:
         for worker in self.workers:
             worker.close()
 
+
+# 定义多项式基函数
+def polynomial_basis(X: np.ndarray, degree: int = 2) -> np.ndarray:
+    """
+    多项式基函数，将输入扩展为多项式特征。
+    :param X: 原始输入数据，形状为 (B, O)
+    :param degree: 多项式的最高阶
+    :return: 扩展后的特征，形状为 (B, O * degree)
+    """
+    B, O = X.shape
+    features = [X]
+    for d in range(2, degree + 1):
+        features.append(X**d)
+    return np.concatenate(features, axis=1)
+
+
 if __name__ == "__main__":
     from env import *
     import torch
-    
+
     MASTER_SEED = 1
     random.seed(MASTER_SEED)
     np.random.seed(MASTER_SEED)
     torch.manual_seed(MASTER_SEED)
-    
+
     logger.setLevel(logging.INFO)
     file_handler = logging.FileHandler("log.txt") # Use this to record your logs in file 
     file_handler.setLevel(logging.INFO)
     logger.addHandler(file_handler)
-    
-    
+
     # Linear
     config = AlphaZeroConfig(
         n_train_iter=50,
@@ -379,7 +393,7 @@ if __name__ == "__main__":
         update_threshold=0.000,
         n_search=240, 
         temperature=1.0, 
-        C=1.0,
+        C=2.0,
         checkpoint_path="checkpoint/linear_7x7_exfeat_norm"
     )
     model_training_config = NumpyModelTrainingConfig(
@@ -391,19 +405,18 @@ if __name__ == "__main__":
     assert config.n_match_update % 2 == 0
     assert config.n_match_eval % 2 == 0
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    
+
     env = GoGame(7, obs_mode="extra_feature")
     # env = GoGame(7) # oringin observation, only the n*n game board
-    
+
     def base_function(X: np.ndarray) -> np.ndarray:
-        return X
-    
+        return polynomial_basis(X, degree=2)  # 使用二阶多项式基函数
+
     def net_builder(device=device):
         net = NumpyLinearModel(env.observation_size, env.action_space_size, None, device=device, base_function=base_function)
         net = NumpyLinearModelTrainer(env.observation_size, env.action_space_size, net, model_training_config)
         return net
-        
+
     N_WORKER = 10 # Set a smaller worker number when debug
     alphazero = AlphaZeroParallel(env, net_builder, config, N_WORKER, seed=MASTER_SEED)
     alphazero.learn()
-    alphazero.close()

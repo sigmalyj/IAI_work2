@@ -158,15 +158,30 @@ class AlphaZero:
                 logger.info(f"[REJECT NEW MODEL]")
 
 
+
+# 定义多项式基函数
+def polynomial_basis(X: np.ndarray, degree: int = 2) -> np.ndarray:
+    """
+    多项式基函数，将输入扩展为多项式特征。
+    :param X: 原始输入数据，形状为 (B, O)
+    :param degree: 多项式的最高阶
+    :return: 扩展后的特征，形状为 (B, O * degree)
+    """
+    B, O = X.shape
+    features = [X]
+    for d in range(2, degree + 1):
+        features.append(X ** d)
+    return np.concatenate(features, axis=1)
+
 if __name__ == "__main__":
     from env import *
     import torch
-    
+
     MASTER_SEED = 0
     random.seed(MASTER_SEED)
     np.random.seed(MASTER_SEED)
     torch.manual_seed(MASTER_SEED)
-    
+
     logger.setLevel(logging.INFO)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
@@ -174,7 +189,7 @@ if __name__ == "__main__":
     file_handler = logging.FileHandler("log.txt")
     file_handler.setLevel(logging.INFO)
     logger.addHandler(file_handler)
-    
+
     # Linear
     config = AlphaZeroConfig(
         n_train_iter=50,
@@ -197,19 +212,18 @@ if __name__ == "__main__":
     assert config.n_match_update % 2 == 0
     assert config.n_match_eval % 2 == 0
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    
+
     # Go Game with extended observation
     env = GoGame(7, obs_mode="extra_feature")
-    
-    # oringin observation, only the n*n game board
-    # Use this for debug, if needed
-    # env = GoGame(7) 
-    
+
+    # 使用多项式基函数扩展特征
     def base_function(X: np.ndarray) -> np.ndarray:
-        return X
-    
-    net = NumpyLinearModel(env.observation_size, env.action_space_size, None, device=device)
+        return polynomial_basis(X, degree=2)  # 使用二阶多项式基函数
+
+    # 初始化线性模型并传入基函数
+    net = NumpyLinearModel(env.observation_size, env.action_space_size, None, device=device, base_function=base_function)
     net = NumpyLinearModelTrainer(env.observation_size, env.action_space_size, net, model_training_config)
-    
+
+    # 开始训练
     alphazero = AlphaZero(env, net, config)
     alphazero.learn()

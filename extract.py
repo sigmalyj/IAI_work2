@@ -16,8 +16,8 @@ log_file_path = args.log_file
 log_file_name = os.path.splitext(os.path.basename(log_file_path))[0]
 
 # 根据当前时间和日志文件名称生成输出文件名
-current_time = datetime.now().strftime("%Y%m%d_%H%M%S")  # 格式化时间为 YYYYMMDD_HHMMSS
-output_csv_path = f"{log_file_name}_results_{current_time}.csv"  # 动态生成文件名
+current_time = datetime.now().strftime("%m%d_%H%M")  # 格式化时间为 YYYYMMDD_HHMMSS
+output_csv_path = f"csv/{log_file_name}_{current_time}.csv"  # 动态生成文件名
 
 # 初始化存储结果的列表
 results = []
