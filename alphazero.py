@@ -214,7 +214,7 @@ if __name__ == "__main__":
         update_threshold=0.500,
         n_search=240, 
         temperature=1.0, 
-        C=1.0,
+        C=2.0,
         checkpoint_path="checkpoint/linear_7x7_exfeat_norm_p1"
     )
     model_training_config = NumpyModelTrainingConfig(

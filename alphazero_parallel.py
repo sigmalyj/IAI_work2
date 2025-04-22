@@ -408,7 +408,7 @@ if __name__ == "__main__":
         n_match_update=20,
         n_match_eval=20,
         max_queue_length=160000,
-        update_threshold=0.000,
+        update_threshold=0.500,
         n_search=240, 
         temperature=1.0, 
         C=2.0,
@@ -427,6 +427,7 @@ if __name__ == "__main__":
     env = GoGame(7, obs_mode="extra_feature")
     # env = GoGame(7) # oringin observation, only the n*n game board
 
+    """
     # 定义高斯核的中心（可以随机初始化或基于数据分布选择）
     num_centers = 10  # 高斯核的数量
     observation_size = np.prod(env.observation_size)  # 展平后的特征维度
@@ -438,6 +439,11 @@ if __name__ == "__main__":
     def base_function(X: np.ndarray) -> np.ndarray:
         X = X.reshape(X.shape[0], -1)  # 展平输入
         return gaussian_basis(X, centers, sigma=0.5)  # 使用高斯核基函数
+    """
+
+    # 使用多项式基函数扩展特征
+    def base_function(X: np.ndarray) -> np.ndarray:
+        return polynomial_basis(X, degree=2)  # 使用多项式基函数
 
     def net_builder(device=device):
         net = NumpyLinearModel(env.observation_size, env.action_space_size, None, device=device, base_function=base_function)
