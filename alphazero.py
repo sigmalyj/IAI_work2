@@ -218,7 +218,7 @@ if __name__ == "__main__":
 
     # 使用多项式基函数扩展特征
     def base_function(X: np.ndarray) -> np.ndarray:
-        return polynomial_basis(X, degree=2)  # 使用二阶多项式基函数
+        return polynomial_basis(X, degree=3)  # 使用三阶多项式基函数
 
     # 初始化线性模型并传入基函数
     net = NumpyLinearModel(env.observation_size, env.action_space_size, None, device=device, base_function=base_function)

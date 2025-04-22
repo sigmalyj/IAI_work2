@@ -410,7 +410,7 @@ if __name__ == "__main__":
     # env = GoGame(7) # oringin observation, only the n*n game board
 
     def base_function(X: np.ndarray) -> np.ndarray:
-        return polynomial_basis(X, degree=2)  # 使用二阶多项式基函数
+        return polynomial_basis(X, degree=3)  # 使用三阶多项式基函数
 
     def net_builder(device=device):
         net = NumpyLinearModel(env.observation_size, env.action_space_size, None, device=device, base_function=base_function)
